@@ -13,6 +13,13 @@ public class DeckManager : MonoBehaviour
 
         //add loaded cards to allCards list
         allCards.AddRange(cards);
+
+        //draw four cards
+        HandManager handManager = FindFirstObjectByType<HandManager>();
+        for (int i = 0; i < 4; i++)
+        {
+            DrawCard(handManager);
+        }
     }
 
 

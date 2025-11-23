@@ -36,7 +36,7 @@ public class CardDisplay : MonoBehaviour
         //update type images
         for (int i = 0; i < typeImages.Length; i++)
         {
-            if (i < cardData.cardType.Count)
+            if (cardData.cardType.Contains((Card.CardType)i))
             {
                 typeImages[i].gameObject.SetActive(true);
             } else
