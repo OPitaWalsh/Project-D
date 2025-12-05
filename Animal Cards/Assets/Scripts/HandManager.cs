@@ -11,21 +11,7 @@ public class HandManager : MonoBehaviour
     public float horizontalSpacing = 5f;
     public float verticalSpacing = 5f;
     public List<GameObject> cardsInHand = new List<GameObject>();
-    
 
-    void Start()    //draw three cards
-    {
-        for (int i = 0; i < 3; i++)
-        {
-            //deckManager.DrawCard(self);
-        }
-    }
-
-
-    void Update()
-    {
-        //UpdateHandVisuals();
-    } 
 
 
     public void AddCardToHand(Card cardData)
@@ -34,6 +20,7 @@ public class HandManager : MonoBehaviour
         GameObject newCard = Instantiate(cardPrefab, handTransform.position, Quaternion.identity, handTransform);
         newCard.GetComponent<CardDisplay>().cardData = cardData;
         cardsInHand.Add(newCard);
+        newCard.GetComponent<CardStats>().state = CardStats.PlayState.InHand;
 
         UpdateHandVisuals();
     }

@@ -1,6 +1,9 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
+using TMPro;
+using System.Linq;
+using UnityEngine.XR;
 
 public class CardMovement : MonoBehaviour, IDragHandler, IPointerDownHandler, IPointerEnterHandler, IPointerExitHandler
 {
@@ -8,6 +11,7 @@ public class CardMovement : MonoBehaviour, IDragHandler, IPointerDownHandler, IP
     private InputAction pointer;
 
     private RectTransform rectTransform;
+    private BoxCollider2D boxColl;
     private Canvas canvas;
     private Vector2 originalLocalPointerPosition;
     private Vector3 originalPanelLocalPosition;
@@ -17,10 +21,11 @@ public class CardMovement : MonoBehaviour, IDragHandler, IPointerDownHandler, IP
     private Vector3 originalPosition;
 
     [SerializeField] private float selectScale = 1.1f;      //a card pops bigger when hovered
-    [SerializeField] private Vector2 cardPlay;      //when does a card snap into play?
-    [SerializeField] private Vector3 playPosition;      //where does it snap to?
+    [SerializeField] private int playPosition;      //which spot does it snap to?
     [SerializeField] private GameObject glowEffect;
     [SerializeField] private GameObject playArrow;
+    [SerializeField] private RectTransform playspot1;
+    [SerializeField] private RectTransform playspot2;
 
 
 
@@ -31,7 +36,13 @@ public class CardMovement : MonoBehaviour, IDragHandler, IPointerDownHandler, IP
         pointer = InputSystem.actions.FindAction("Point");
 
         rectTransform = GetComponent<RectTransform>();
+        boxColl = GetComponent<BoxCollider2D>();
         canvas = GetComponentInParent<Canvas>();
+        
+        GameObject[] PSes = GameObject.FindGameObjectsWithTag("Playspots");
+        playspot1 = PSes.ElementAt<GameObject>(1).GetComponent<RectTransform>();
+        playspot2 = PSes.ElementAt<GameObject>(0).GetComponent<RectTransform>();
+
         originalScale = rectTransform.localScale;
         originalPosition = rectTransform.localPosition;
         originalRotation = rectTransform.localRotation;
@@ -59,13 +70,19 @@ public class CardMovement : MonoBehaviour, IDragHandler, IPointerDownHandler, IP
                 HandlePlayState();
                 if (!click.IsPressed())   //if mouse button is released
                 {
+                    rectTransform.SetParent(playPosition == 1 ? playspot1 : playspot2);
+                    GetComponent<CardStats>().state = CardStats.PlayState.InPlay;
+                    FindFirstObjectByType<HandManager>().cardsInHand.Remove(gameObject);
+                    
+                    originalPosition = rectTransform.localPosition;
+                    originalRotation = Quaternion.identity;
                     TransitionToState0();
                 }
                 break;
             default:
                 TransitionToState0();
                 break;
-        }
+        }  
     }
 
 
@@ -109,13 +126,16 @@ public class CardMovement : MonoBehaviour, IDragHandler, IPointerDownHandler, IP
     //currentState 1 -> 2
     public void OnPointerDown(PointerEventData eventData)
     {
-        if (currentState == 1)
+        if (GameManager.Instance.TurnCount == 1 && GameManager.Instance.PhaseCount == 1 && GetComponent<CardStats>().state == CardStats.PlayState.InHand)
         {
-            currentState = 2;
-            //get correct position according to the camera's view of the world...
-            //...as originalLocalPointerPosition
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(canvas.GetComponent<RectTransform>(), eventData.position, eventData.pressEventCamera, out originalLocalPointerPosition);
-            originalPanelLocalPosition = rectTransform.localPosition;
+            if (currentState == 1)
+            {
+                currentState = 2;
+                //get correct position according to the camera's view of the world...
+                //...as originalLocalPointerPosition
+                RectTransformUtility.ScreenPointToLocalPointInRectangle(canvas.GetComponent<RectTransform>(), eventData.position, eventData.pressEventCamera, out originalLocalPointerPosition);
+                originalPanelLocalPosition = rectTransform.localPosition;
+            }
         }
     }
 
@@ -137,13 +157,35 @@ public class CardMovement : MonoBehaviour, IDragHandler, IPointerDownHandler, IP
                 //move it!
                 rectTransform.localPosition = originalPanelLocalPosition + offsetToOriginal;
                 
-                //if within the Y range for a card entering play...
-                if (rectTransform.localPosition.y > cardPlay.y)
+                //if within a playspot...
+                if (boxColl.OverlapPoint(playspot1.position) && playspot1.childCount == 0)
                 {
                     currentState = 3;       //...flag that and...
                     playArrow.SetActive(true);
-                    rectTransform.localPosition = playPosition;     //snap to position
+                    rectTransform.position = playspot1.position;     //snap to position
+                    playPosition = 1;
                 }
+                else if (boxColl.OverlapPoint(playspot2.position) && playspot2.childCount == 0)
+                {
+                    currentState = 3;       //...flag that and...
+                    playArrow.SetActive(true);
+                    rectTransform.position = playspot2.position;     //snap to position
+                    playPosition = 2;
+                }
+            }
+        }
+        //if card, still clicked, is dragged out of a playspot...
+        else if (currentState == 3)
+        {
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(canvas.GetComponent<RectTransform>(), eventData.position, eventData.pressEventCamera, out Vector2 localPointerPosition);
+            localPointerPosition /= canvas.scaleFactor;
+            if (!boxColl.OverlapPoint(localPointerPosition))
+            {
+                Vector3 offsetToOriginal = localPointerPosition - originalLocalPointerPosition;
+                rectTransform.localPosition = originalPanelLocalPosition + offsetToOriginal;
+                currentState = 2;       //...flag that it is no longer over play area
+                playArrow.SetActive(false);
+                playPosition = 0;
             }
         }
     }
@@ -165,15 +207,9 @@ public class CardMovement : MonoBehaviour, IDragHandler, IPointerDownHandler, IP
     
     private void HandlePlayState()
     {
-        rectTransform.localPosition = playPosition;
         rectTransform.localRotation = Quaternion.identity;
 
-        //if card, still clicked, is dragged below play area...
-        if (pointer.ReadValue<Vector2>().y < cardPlay.y)
-        {
-            currentState = 2;       //...flag that it is no longer over play area
-            playArrow.SetActive(false);
-        }
-        
+        if (playPosition == 1) { rectTransform.position = playspot1.position; }
+        else if (playPosition == 2) { rectTransform.position = playspot2.position; }     
     }
 }
