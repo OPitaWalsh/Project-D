@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 public class HandManager : MonoBehaviour
 {
     public DeckManager deckManager;
+    public DiscardManager discardManager;
     public GameObject cardPrefab;
     public Transform handTransform;
     public float fanSpread = 5f;
@@ -23,6 +25,12 @@ public class HandManager : MonoBehaviour
         newCard.GetComponent<CardStats>().state = CardStats.PlayState.InHand;
 
         UpdateHandVisuals();
+    }
+
+
+    public void DiscardAll()
+    {
+        //
     }
 
 

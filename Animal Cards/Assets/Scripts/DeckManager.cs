@@ -46,6 +46,7 @@ public class DeckManager : MonoBehaviour
 
     public void ResetGame()
     {
+        handManager.DiscardAll();
         //return discard to deck
         deckCards.AddRange(discardManager.PullAllFromDiscard());
 

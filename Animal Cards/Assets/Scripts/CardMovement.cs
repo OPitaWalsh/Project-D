@@ -4,6 +4,7 @@ using UnityEngine.InputSystem;
 using TMPro;
 using System.Linq;
 using UnityEngine.XR;
+using System.Data;
 
 public class CardMovement : MonoBehaviour, IDragHandler, IPointerDownHandler, IPointerEnterHandler, IPointerExitHandler
 {
@@ -19,6 +20,7 @@ public class CardMovement : MonoBehaviour, IDragHandler, IPointerDownHandler, IP
     private int currentState = 0;
     private Quaternion originalRotation;
     private Vector3 originalPosition;
+    private CardStats attackTarget;
 
     [SerializeField] private float selectScale = 1.1f;      //a card pops bigger when hovered
     [SerializeField] private int playPosition;      //which spot does it snap to?
@@ -40,8 +42,8 @@ public class CardMovement : MonoBehaviour, IDragHandler, IPointerDownHandler, IP
         canvas = GetComponentInParent<Canvas>();
         
         GameObject[] PSes = GameObject.FindGameObjectsWithTag("Playspots");
-        playspot1 = PSes.ElementAt<GameObject>(1).GetComponent<RectTransform>();
-        playspot2 = PSes.ElementAt<GameObject>(0).GetComponent<RectTransform>();
+        playspot1 = PSes.ElementAt<GameObject>(0).GetComponent<RectTransform>();
+        playspot2 = PSes.ElementAt<GameObject>(1).GetComponent<RectTransform>();
 
         originalScale = rectTransform.localScale;
         originalPosition = rectTransform.localPosition;
@@ -59,7 +61,7 @@ public class CardMovement : MonoBehaviour, IDragHandler, IPointerDownHandler, IP
             case 1:     //if pointer is over card
                 HandleHoverState();
                 break;
-            case 2:     //if card is clicked
+            case 2:     //if card is clicked from hand
                 HandleDragState();
                 if (!click.IsPressed())   //if mouse button is released
                 {
@@ -71,11 +73,28 @@ public class CardMovement : MonoBehaviour, IDragHandler, IPointerDownHandler, IP
                 if (!click.IsPressed())   //if mouse button is released
                 {
                     rectTransform.SetParent(playPosition == 1 ? playspot1 : playspot2);
-                    GetComponent<CardStats>().state = CardStats.PlayState.InPlay;
+                    GetComponent<CardStats>().EnterPlay();
                     FindFirstObjectByType<HandManager>().cardsInHand.Remove(gameObject);
                     
                     originalPosition = rectTransform.localPosition;
                     originalRotation = Quaternion.identity;
+                    TransitionToState0();
+                }
+                break;
+            case 4:     //if card is clicked from play
+                HandleDragState();
+                if (!click.IsPressed())   //if mouse button is released
+                {
+                    TransitionToState0();
+                }
+                break;
+            case 5:     //if card held over enemy card
+                if (!click.IsPressed())   //if mouse button is released
+                {
+                    if (attackTarget != null)
+                    {
+                        attackTarget.TakeDamage(GetComponent<CardDisplay>().cardData.damage);
+                    }
                     TransitionToState0();
                 }
                 break;
@@ -95,6 +114,7 @@ public class CardMovement : MonoBehaviour, IDragHandler, IPointerDownHandler, IP
         rectTransform.localRotation = originalRotation;
         glowEffect.SetActive(false);
         playArrow.SetActive(false);
+        attackTarget = null;
     }
 
 
@@ -137,13 +157,24 @@ public class CardMovement : MonoBehaviour, IDragHandler, IPointerDownHandler, IP
                 originalPanelLocalPosition = rectTransform.localPosition;
             }
         }
+        else if (GameManager.Instance.TurnCount == 1 && GameManager.Instance.PhaseCount == 2 && GetComponent<CardStats>().state == CardStats.PlayState.InPlay)
+        {
+            if (currentState == 1)
+            {
+                currentState = 4;
+                //get correct position according to the camera's view of the world...
+                //...as originalLocalPointerPosition
+                RectTransformUtility.ScreenPointToLocalPointInRectangle(canvas.GetComponent<RectTransform>(), eventData.position, eventData.pressEventCamera, out originalLocalPointerPosition);
+                originalPanelLocalPosition = rectTransform.localPosition;
+            }
+        }
     }
 
 
-    //currentState 2 -> 3, if over play area
+    //currentState 2 -> 3, if over play area; 4 -> 5 if over enemy card
     public void OnDrag(PointerEventData eventData)
     {
-        if (currentState == 2)
+        if (currentState == 2 || currentState == 4)
         {
             //get correct position according to the camera's view of the world...
             //...as localPointerPosition
@@ -157,23 +188,43 @@ public class CardMovement : MonoBehaviour, IDragHandler, IPointerDownHandler, IP
                 //move it!
                 rectTransform.localPosition = originalPanelLocalPosition + offsetToOriginal;
                 
-                //if within a playspot...
-                if (boxColl.OverlapPoint(playspot1.position) && playspot1.childCount == 0)
-                {
-                    currentState = 3;       //...flag that and...
-                    playArrow.SetActive(true);
-                    rectTransform.position = playspot1.position;     //snap to position
-                    playPosition = 1;
+                //put into play
+                if (currentState == 2) {
+                    //if within a playspot...
+                    if (boxColl.OverlapPoint(playspot1.position) && playspot1.childCount == 0)
+                    {
+                        currentState = 3;       //...flag that and...
+                        playArrow.SetActive(true);
+                        rectTransform.position = playspot1.position;     //snap to position
+                        playPosition = 1;
+                    }
+                    else if (boxColl.OverlapPoint(playspot2.position) && playspot2.childCount == 0)
+                    {
+                        currentState = 3;       //...flag that and...
+                        playArrow.SetActive(true);
+                        rectTransform.position = playspot2.position;     //snap to position
+                        playPosition = 2;
+                    }
                 }
-                else if (boxColl.OverlapPoint(playspot2.position) && playspot2.childCount == 0)
+
+                //launch attack
+                else if (currentState == 4)
                 {
-                    currentState = 3;       //...flag that and...
-                    playArrow.SetActive(true);
-                    rectTransform.position = playspot2.position;     //snap to position
-                    playPosition = 2;
+                    //if over played enemy card
+                    if (playPosition == 1 && boxColl.OverlapPoint(playspot2.position) && playspot2.childCount == 1)
+                    {
+                        currentState = 5;       //...flag that and...
+                        attackTarget = playspot2.GetComponentInChildren<CardStats>();     //target enemy
+                    }
+                    else if (playPosition == 2 && boxColl.OverlapPoint(playspot1.position) && playspot1.childCount == 1)
+                    {
+                        currentState = 5;       //...flag that and...
+                        attackTarget = playspot1.GetComponentInChildren<CardStats>();     //target enemy
+                    }
                 }
             }
         }
+
         //if card, still clicked, is dragged out of a playspot...
         else if (currentState == 3)
         {
@@ -186,6 +237,17 @@ public class CardMovement : MonoBehaviour, IDragHandler, IPointerDownHandler, IP
                 currentState = 2;       //...flag that it is no longer over play area
                 playArrow.SetActive(false);
                 playPosition = 0;
+            }
+        }
+        //if card, still clicked, is dragged out of enemy card...
+        else if (currentState == 5)
+        {
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(canvas.GetComponent<RectTransform>(), eventData.position, eventData.pressEventCamera, out Vector2 localPointerPosition);
+            localPointerPosition /= canvas.scaleFactor;
+            if (!boxColl.OverlapPoint(localPointerPosition))
+            {
+                currentState = 4;       //...flag that
+                attackTarget = null;
             }
         }
     }

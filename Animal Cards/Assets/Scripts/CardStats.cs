@@ -13,29 +13,29 @@ public class CardStats : MonoBehaviour
     }
 
     public PlayState state = PlayState.InDeck;
-    public int currHP;
 
 
     void Awake()
     {
-        discardManager = gameObject.GetComponent<DiscardManager>();
-        cardData = gameObject.GetComponent<CardDisplay>().cardData;
+        discardManager = FindFirstObjectByType<DiscardManager>();
     }
 
 
     public void EnterPlay()
     {
+        cardData = GetComponent<CardDisplay>().cardData;
         state = PlayState.InPlay;
-        currHP = cardData.health;
     }
 
     public void TakeDamage(int amount)
     {
-        currHP -= amount;
-        if (currHP <= 0)
+        cardData.health -= amount;
+        GetComponent<CardDisplay>().UpdateCardDisplay();
+        if (cardData.health <= 0)
         {
             state = PlayState.InDiscard;
             discardManager.AddToDiscard(cardData);
+            Destroy(gameObject);
         }
     }
 }
